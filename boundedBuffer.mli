@@ -1,3 +1,4 @@
+(** Implement an impure bounded buffer. *)
 type 'a t
 
 exception InvalidAccess
