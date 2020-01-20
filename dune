@@ -1,0 +1,12 @@
+(ocamllex prelexer)
+
+(menhir
+ (flags --dump --explain --inspection --table --unused-token NEWLINE)
+ (modules parser))
+
+(executable
+ (name semicolon)
+ (flags :standard -w -26)
+ (modules :standard)
+ (libraries menhirLib)
+)
