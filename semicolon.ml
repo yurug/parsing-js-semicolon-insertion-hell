@@ -3,35 +3,78 @@ open Parser
 open Parser.Incremental
 open Parser.MenhirInterpreter
 
+exception ParseError
+
 let parse lexer =
+
+  (*
+
+     We make use of the incremental mode of Menhir which allows
+     us to execute parsing step-by-step and to exploit the purity
+     of the parser state to perform some speculative parsing.
+
+     Thanks to {!Lexer}, the [lexer] is a persistent representation
+     of the lexer state.
+
+     [previous_checkpoint] is the state of the parser before
+     the latest token was offered to it.
+
+     Note: We could join the lexer and the checkpoint into a
+     single state to improve readability and also enforce the
+     synchronization between the two.
+
+  *)
 
   let rec parse lexer previous_checkpoint checkpoint =
     match checkpoint with
+    (*
+
+       The parser asks for a token.
+
+       This is an opportunity to integrate Rule 3 of 11.9.1.
+
+    *)
     | InputNeeded _ ->
        begin
          let (token, lexer) = next_token lexer in
          try_semicolon_rule_3 token lexer checkpoint |> function
          | None ->
+            (* Rule 3 does not apply. We simply transmit the current token. *)
             parse lexer (Some checkpoint) (offer checkpoint token)
          | Some (lexer, checkpoint') ->
+            (* Rule 3 does apply. A semicolon is inserted and the current
+               token will be considered later on. *)
             parse lexer (Some checkpoint) checkpoint'
        end
-    | Accepted ast ->
-       ast
-    | HandlingError _ | AboutToReduce _ | Shifting _ ->
-       parse lexer previous_checkpoint (resume checkpoint)
+
+    (*
+
+        There is an offending token. We try to apply Rule 1 or Rule 2
+        of 11.9.1 to insert a semicolon.
+
+    *)
     | Rejected ->
-       match previous_checkpoint with
+       begin match previous_checkpoint with
        | None ->
-          failwith "parse_error"
-       | Some reboot_checkpoint ->
+          assert false
+          (* because a parse error can only arise if at least
+             one token is read. *)
+       | Some reboot_checkpoint -> begin
           (try_semicolon_rule_1 lexer ||| try_semicolon_rule_2 lexer)
           reboot_checkpoint
           |> function
           | None ->
-             failwith "parse error"
+             raise ParseError
           | Some (lexer, checkpoint) ->
              parse lexer previous_checkpoint checkpoint
+         end
+       end
+    (* For other cases, we simply follow the standard flow of
+       LR(1) parser. *)
+    | Accepted ast ->
+       ast
+    | HandlingError _ | AboutToReduce _ | Shifting _ ->
+       parse lexer previous_checkpoint (resume checkpoint)
 
 
   (* We keep NEWLINEs in the stream of tokens but we hide them to the
@@ -63,8 +106,18 @@ let parse lexer =
 
   (*
 
-     ... then a semicolon is automatically inserted before
-     the offending token ...
+     ... then a semicolon is automatically inserted before the
+     offending token ...
+
+     Notice that there is a special case in the standard:
+
+     "However, there is an additional overriding condition on the
+      preceding rules: a semicolon is never inserted automatically if
+      the semicolon would then be parsed as an empty statement or if
+      that semicolon would become one of the two semicolons in the
+      header of a for statement (see 13.7.4)."
+
+      which we implement by the two predicates starting with [would_].
 
   *)
   and insert_semicolon lexer checkpoint =
@@ -231,6 +284,12 @@ let parse lexer =
   parse lexer None (goal Lexing.dummy_pos)
 
 let parse_string s = parse (Lexer.make 3 (Lexing.from_string s))
+
+(*
+
+   Some unit tests.
+
+*)
 
 let score = ref 0
 
