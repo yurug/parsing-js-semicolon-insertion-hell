@@ -324,9 +324,5 @@ let _tests_ = if make_test then (
   ]
 )
 
-let _test = reject
-"for (x
-        y; z) z = y;"
-
 let _conclude_ =
   Printf.eprintf "SCORE: %d/%d\n" !score !nb_tests
