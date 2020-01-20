@@ -139,6 +139,7 @@ let parse lexer =
           (13.7.2).
     *)
     let previous_token_is_end_of_do_while_condition () =
+      preceded_by RPAREN lexer &&
       let _, checkpoint = insert_semicolon lexer checkpoint in
       match Utils.next_reduction (Some (Lexer.read_token lexer)) checkpoint with
       | Some production ->
